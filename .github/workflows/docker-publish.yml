@@ -1,57 +1,68 @@
 name: Docker Build and Push
-# 触发条件：推送到 main 分支
+# 触发条件：仅当代码推送到 main 分支时触发工作流
 on:
   push:
     branches: ["main"]
 
-# 权限配置：允许读取代码、写入 Packages
+# 权限配置：必须包含读取代码（contents: read）和写入 Packages（packages: write）权限
+# 参考文档要求：推送镜像到 GitHub Container Registry 需明确该权限
 permissions:
   contents: read
   packages: write
 
 jobs:
-  # 测试作业：运行 npm test
+  # 第一个作业：代码测试（依赖通过后才执行构建推送）
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # 使用 GitHub 托管的 Ubuntu 运行器
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4 # 检出代码
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '18' # 匹配 Dockerfile 中的 Node 版本
-
-      - name: Install dependencies
-        run: npm install # 安装依赖
-
-      - name: Run tests
-        run: npm test # 运行测试（默认返回成功）
-
-  # 构建并推送镜像作业
-  build-and-push:
-    needs: test # 依赖 test 作业，测试通过才执行
-    runs-on: ubuntu-latest
-    steps:
+      # 步骤1：检出当前仓库代码（使用官方 checkout Action v4 版本）
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3 # 配置 Docker 构建环境
-
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3 # 登录 GHCR
+      # 步骤2：配置 Node.js 环境（匹配 Dockerfile 中的 Node 18 版本）
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }} # 自动获取当前用户
-          password: ${{ secrets.GITHUB_TOKEN }} # GitHub 自动生成的密钥（无需手动配置）
+          node-version: '18'  # 与 Dockerfile 中 FROM node:18-alpine 版本保持一致
 
+      # 步骤3：安装项目依赖（基于 package.json）
+      - name: Install dependencies
+        run: npm install
+
+      # 步骤4：运行测试脚本（对应 package.json 中的 "test" 脚本）
+      - name: Run tests
+        run: npm test
+
+  # 第二个作业：构建并推送 Docker 镜像（依赖 test 作业成功）
+  build-and-push:
+    needs: test  # 关键依赖：仅当 test 作业执行成功后，才启动本作业
+    runs-on: ubuntu-latest
+    steps:
+      # 步骤1：检出代码（构建镜像需读取仓库中的 Dockerfile 和项目文件）
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 步骤2：配置 Docker Buildx 环境（Docker 官方推荐的构建工具，支持多平台构建）
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 步骤3：登录到 GitHub Container Registry（GHCR）
+      # 参考文档：使用 GitHub 自动生成的 GITHUB_TOKEN，无需手动创建密钥
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io  # GitHub Container Registry 地址
+          username: ${{ github.actor }}  # 自动获取当前触发工作流的 GitHub 用户名
+          password: ${{ secrets.GITHUB_TOKEN }}  # 自动注入的密钥，拥有预设的 Packages 操作权限
+
+      # 步骤4：构建并推送 Docker 镜像（核心步骤，支持多标签）
+      # 实现进阶需求：同时推送 latest 标签（默认最新版）和 SHA 标签（唯一版本，支持回滚）
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-           context: .
-           push: true
-           # 同时添加两个标签：latest（默认最新）和 SHA 前7位（唯一版本）
-           tags: |
+          context: .  # 构建上下文：指定从仓库根目录读取文件（含 Dockerfile、app.js 等）
+          push: true  # 启用镜像推送功能（设为 false 仅构建不推送，需设为 true）
+          # 多标签配置：通过 | 符号支持多行标签，镜像名称必须全小写（文档强制要求）
+          tags: |
             ghcr.io/${{ github.repository_owner }}/ci-cd-practice:latest
             ghcr.io/${{ github.repository_owner }}/ci-cd-practice:${{ github.sha::7 }}
