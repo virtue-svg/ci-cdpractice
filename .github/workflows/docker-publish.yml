@@ -47,9 +47,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }} # GitHub 自动生成的密钥（无需手动配置）
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5 # 构建并推送镜像
+        uses: docker/build-push-action@v5
         with:
-          context: . # 构建上下文（当前目录）
-          push: true # 启用推送
-          # 镜像标签：必须全小写，格式为 ghcr.io/用户名/仓库名:标签
-          tags: ghcr.io/${{ github.repository_owner }}/ci-cd-practice:latest
+           context: .
+           push: true
+           # 同时添加两个标签：latest（默认最新）和 SHA 前7位（唯一版本）
+           tags: |
+            ghcr.io/${{ github.repository_owner }}/ci-cd-practice:latest
+            ghcr.io/${{ github.repository_owner }}/ci-cd-practice:${{ github.sha::7 }}
