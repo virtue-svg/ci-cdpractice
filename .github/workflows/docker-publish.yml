@@ -65,4 +65,4 @@ jobs:
           # 多标签配置：通过 | 符号支持多行标签，镜像名称必须全小写（文档强制要求）
           tags: |
             ghcr.io/${{ github.repository_owner }}/ci-cd-practice:latest
-            ghcr.io/${{ github.repository_owner }}/ci-cd-practice:${{ github.sha::7 }}
+            ghcr.io/${{ github.repository_owner }}/ci-cd-practice:${{ github.sha:0:7 }}
